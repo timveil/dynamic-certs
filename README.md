@@ -3,22 +3,22 @@
 
 ## Building the Image
 ```bash
-docker build --no-cache -t timveil/cockroachdb-dynamic-certs:latest .
+docker build --no-cache -t timveil/cockroachdb-dynamic-certs:openssl .
 ```
 
 ## Publishing the Image
 ```bash
-docker push timveil/cockroachdb-dynamic-certs:latest
+docker push timveil/cockroachdb-dynamic-certs:openssl
 ```
 
 ## Running the Image
 ```bash
-docker run -it timveil/cockroachdb-dynamic-certs:latest
+docker run -it timveil/cockroachdb-dynamic-certs:openssl
 ```
 
 running the image with environment variables
 ```bash
 docker run -p 9999:9999 \
     --env NODE_ALTERNATIVE_NAMES=localhost \
-    -it timveil/cockroachdb-dynamic-certs:latest
+    -it timveil/cockroachdb-dynamic-certs:openssl
 ```
