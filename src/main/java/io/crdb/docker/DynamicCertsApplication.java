@@ -36,6 +36,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
     private static final String COCKROACH_CLIENT_ROOT_CSR = COCKROACH_INTERNAL_DIR + "/client.root.csr";
     private static final String COCKROACH_CLIENT_ROOT_KEY = COCKROACH_EXTERNAL_DIR + "/client.root.key";
     private static final String COCKROACH_CLIENT_ROOT_CERT = COCKROACH_EXTERNAL_DIR + "/client.root.crt";
+    private static final String COCKROACH_CLIENT_ROOT_P12 = COCKROACH_EXTERNAL_DIR + "/client.p12";
 
     public static final String CONFIG_CA = "/config/ca.cnf";
     public static final String CONFIG_CLIENT_ROOT = "/config/client.root.cnf";
@@ -88,7 +89,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
     }
 
     private void createWithOpenSSL(List<String> nodeAlternativeNames, Set<String> usernames) throws IOException, InterruptedException {
-        generateKey(COCKROACH_CA_KEY);
+        generateKey(COCKROACH_CA_KEY, false);
 
         List<String> createCACertCommands = new ArrayList<>();
         createCACertCommands.add("openssl");
@@ -114,7 +115,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
         // generate node certs...
 
-        generateKey(COCKROACH_NODE_KEY);
+        generateKey(COCKROACH_NODE_KEY, false);
 
         generateCSR(CONFIG_NODE, COCKROACH_NODE_KEY, COCKROACH_NODE_CSR);
 
@@ -123,11 +124,13 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
         // generate client certs...
 
-        generateKey(COCKROACH_CLIENT_ROOT_KEY);
+        generateKey(COCKROACH_CLIENT_ROOT_KEY, true);
 
         generateCSR(CONFIG_CLIENT_ROOT, COCKROACH_CLIENT_ROOT_KEY, COCKROACH_CLIENT_ROOT_CSR);
 
         generateCertificate(COCKROACH_CLIENT_ROOT_CERT, COCKROACH_CLIENT_ROOT_CSR);
+
+        generateP12(COCKROACH_CLIENT_ROOT_P12, COCKROACH_CLIENT_ROOT_CERT, COCKROACH_CLIENT_ROOT_KEY);
 
     }
 
@@ -172,7 +175,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         handleProcess(new ProcessBuilder(commands));
     }
 
-    private void generateKey(String out) throws IOException, InterruptedException {
+    private void generateKey(String out, boolean generatePK8) throws IOException, InterruptedException {
         List<String> commands = new ArrayList<>();
         commands.add("openssl");
         commands.add("genrsa");
@@ -184,6 +187,50 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
         handleProcess(new ProcessBuilder("chmod", "400", out));
 
+        // generates PK8 file in DER format
+        if (generatePK8) {
+
+            String pk8Out = out + ".pk8";
+
+            List<String> pkcs8Commands = new ArrayList<>();
+            pkcs8Commands.add("openssl");
+            pkcs8Commands.add("pkcs8");
+            pkcs8Commands.add("-topk8");
+            pkcs8Commands.add("-inform");
+            pkcs8Commands.add("PEM");
+            pkcs8Commands.add("-outform");
+            pkcs8Commands.add("DER");
+            pkcs8Commands.add("-nocrypt");
+            pkcs8Commands.add("-in");
+            pkcs8Commands.add(out);
+            pkcs8Commands.add("-out");
+            pkcs8Commands.add(pk8Out);
+
+            handleProcess(new ProcessBuilder(pkcs8Commands));
+
+            handleProcess(new ProcessBuilder("chmod", "400", pk8Out));
+        }
+
+    }
+
+    private void generateP12(String out, String inCert, String inKey) throws IOException, InterruptedException {
+        List<String> commands = new ArrayList<>();
+        commands.add("openssl");
+        commands.add("pkcs12");
+        commands.add("-export");
+        commands.add("-out");
+        commands.add(out);
+        commands.add("-inkey");
+        commands.add(inKey);
+        commands.add("-in");
+        commands.add(inCert);
+        commands.add("-passout");
+        commands.add("pass:password"); //todo: make dynamic
+
+
+        handleProcess(new ProcessBuilder(commands));
+
+        handleProcess(new ProcessBuilder("chmod", "600", out));
     }
 
     private void createWithCockroach(List<String> nodeAlternativeNames, Set<String> usernames) throws IOException, InterruptedException {
