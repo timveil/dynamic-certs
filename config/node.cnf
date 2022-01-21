@@ -8,4 +8,4 @@ req_extensions = extensions
 organizationName = Cockroach
 
 [ extensions ]
-subjectAltName = critical,DNS:localhost,DNS:*.crdb.io,IP:127.0.0.1
+subjectAltName = critical,DNS:node,DNS:localhost,DNS:*.crdb.io,IP:127.0.0.1
