@@ -17,6 +17,10 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DynamicCertsApplication.class);
 
+    private enum Outform {
+        PEM,DER
+    }
+
     private static final String USE_OPENSSL = "USE_OPENSSL";
     private static final String CLIENT_USERNAME = "CLIENT_USERNAME";
     private static final String NODE_ALTERNATIVE_NAMES = "NODE_ALTERNATIVE_NAMES";
@@ -34,7 +38,8 @@ public class DynamicCertsApplication implements ApplicationRunner {
     private static final String COCKROACH_NODE_CERT = COCKROACH_EXTERNAL_DIR + "/node.crt";
 
     private static final String COCKROACH_CLIENT_ROOT_CSR = COCKROACH_INTERNAL_DIR + "/client.root.csr";
-    private static final String COCKROACH_CLIENT_ROOT_KEY = COCKROACH_EXTERNAL_DIR + "/client.root.key";
+    private static final String COCKROACH_CLIENT_ROOT_KEY_PEM = COCKROACH_EXTERNAL_DIR + "/client.root.key";
+    private static final String COCKROACH_CLIENT_ROOT_KEY_DER = COCKROACH_EXTERNAL_DIR + "/client.root.der";
     private static final String COCKROACH_CLIENT_ROOT_CERT = COCKROACH_EXTERNAL_DIR + "/client.root.crt";
     private static final String COCKROACH_CLIENT_ROOT_P12 = COCKROACH_EXTERNAL_DIR + "/client.p12";
 
@@ -89,11 +94,12 @@ public class DynamicCertsApplication implements ApplicationRunner {
     }
 
     private void createWithOpenSSL(List<String> nodeAlternativeNames, Set<String> usernames) throws IOException, InterruptedException {
-        generateKey(COCKROACH_CA_KEY, false);
+        generateKey(COCKROACH_CA_KEY, Outform.PEM);
 
         List<String> createCACertCommands = new ArrayList<>();
         createCACertCommands.add("openssl");
         createCACertCommands.add("req");
+        createCACertCommands.add("-verbose");
         createCACertCommands.add("-new");
         createCACertCommands.add("-x509");
         createCACertCommands.add("-config");
@@ -115,7 +121,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
         // generate node certs...
 
-        generateKey(COCKROACH_NODE_KEY, false);
+        generateKey(COCKROACH_NODE_KEY, Outform.PEM);
 
         generateCSR(CONFIG_NODE, COCKROACH_NODE_KEY, COCKROACH_NODE_CSR);
 
@@ -124,13 +130,15 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
         // generate client certs...
 
-        generateKey(COCKROACH_CLIENT_ROOT_KEY, true);
+        generateKey(COCKROACH_CLIENT_ROOT_KEY_PEM, Outform.PEM);
 
-        generateCSR(CONFIG_CLIENT_ROOT, COCKROACH_CLIENT_ROOT_KEY, COCKROACH_CLIENT_ROOT_CSR);
+        generateKey(COCKROACH_CLIENT_ROOT_KEY_DER, Outform.DER);
+
+        generateCSR(CONFIG_CLIENT_ROOT, COCKROACH_CLIENT_ROOT_KEY_PEM, COCKROACH_CLIENT_ROOT_CSR);
 
         generateCertificate(COCKROACH_CLIENT_ROOT_CERT, COCKROACH_CLIENT_ROOT_CSR);
 
-        generateP12(COCKROACH_CLIENT_ROOT_P12, COCKROACH_CLIENT_ROOT_CERT, COCKROACH_CLIENT_ROOT_KEY);
+        generateP12(COCKROACH_CLIENT_ROOT_P12, COCKROACH_CLIENT_ROOT_CERT, COCKROACH_CLIENT_ROOT_KEY_PEM);
 
     }
 
@@ -138,6 +146,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         List<String> commands = new ArrayList<>();
         commands.add("openssl");
         commands.add("ca");
+        commands.add("-verbose");
         commands.add("-config");
         commands.add(CONFIG_CA);
         commands.add("-keyfile");
@@ -163,6 +172,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         List<String> commands = new ArrayList<>();
         commands.add("openssl");
         commands.add("req");
+        commands.add("-verbose");
         commands.add("-new");
         commands.add("-config");
         commands.add(config);
@@ -175,41 +185,20 @@ public class DynamicCertsApplication implements ApplicationRunner {
         handleProcess(new ProcessBuilder(commands));
     }
 
-    private void generateKey(String out, boolean generatePK8) throws IOException, InterruptedException {
+    private void generateKey(String out, Outform outform) throws IOException, InterruptedException {
         List<String> commands = new ArrayList<>();
         commands.add("openssl");
-        commands.add("genrsa");
+        commands.add("genpkey");
+        commands.add("-outform");
+        commands.add(outform.name());
+        commands.add("-algorithm");
+        commands.add("RSA");
         commands.add("-out");
         commands.add(out);
-        commands.add("2048");
 
         handleProcess(new ProcessBuilder(commands));
 
         handleProcess(new ProcessBuilder("chmod", "400", out));
-
-        // generates PK8 file in DER format
-        if (generatePK8) {
-
-            String pk8Out = out + ".pk8";
-
-            List<String> pkcs8Commands = new ArrayList<>();
-            pkcs8Commands.add("openssl");
-            pkcs8Commands.add("pkcs8");
-            pkcs8Commands.add("-topk8");
-            pkcs8Commands.add("-inform");
-            pkcs8Commands.add("PEM");
-            pkcs8Commands.add("-outform");
-            pkcs8Commands.add("DER");
-            pkcs8Commands.add("-nocrypt");
-            pkcs8Commands.add("-in");
-            pkcs8Commands.add(out);
-            pkcs8Commands.add("-out");
-            pkcs8Commands.add(pk8Out);
-
-            handleProcess(new ProcessBuilder(pkcs8Commands));
-
-            handleProcess(new ProcessBuilder("chmod", "400", pk8Out));
-        }
 
     }
 
