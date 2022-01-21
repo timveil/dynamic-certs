@@ -20,21 +20,22 @@ public class DynamicCertsApplication implements ApplicationRunner {
     private static final String USE_OPENSSL = "USE_OPENSSL";
     private static final String CLIENT_USERNAME = "CLIENT_USERNAME";
     private static final String NODE_ALTERNATIVE_NAMES = "NODE_ALTERNATIVE_NAMES";
+
     private static final String DEFAULT_USERNAME = "root";
 
-    private static final String COCKROACH_KEY_DIR = "/.cockroach-key";
-    private static final String COCKROACH_CERTS_DIR = "/.cockroach-certs";
+    private static final String COCKROACH_INTERNAL_DIR = "/.cockroach-internal";
+    private static final String COCKROACH_EXTERNAL_DIR = "/.cockroach-certs";
 
-    private static final String COCKROACH_CA_KEY = COCKROACH_KEY_DIR + "/ca.key";
-    private static final String COCKROACH_CA_CERT = COCKROACH_CERTS_DIR + "/ca.crt";
+    private static final String COCKROACH_CA_KEY = COCKROACH_INTERNAL_DIR + "/ca.key";
+    private static final String COCKROACH_CA_CERT = COCKROACH_EXTERNAL_DIR + "/ca.crt";
 
-    private static final String COCKROACH_NODE_KEY = COCKROACH_KEY_DIR + "/node.key";
-    private static final String COCKROACH_NODE_CSR = COCKROACH_CERTS_DIR + "/node.csr";
-    private static final String COCKROACH_NODE_CERT = COCKROACH_CERTS_DIR + "/node.crt";
+    private static final String COCKROACH_NODE_CSR = COCKROACH_INTERNAL_DIR + "/node.csr";
+    private static final String COCKROACH_NODE_KEY = COCKROACH_EXTERNAL_DIR + "/node.key";
+    private static final String COCKROACH_NODE_CERT = COCKROACH_EXTERNAL_DIR + "/node.crt";
 
-    private static final String COCKROACH_CLIENT_ROOT_KEY = COCKROACH_KEY_DIR + "/client.root.key";
-    private static final String COCKROACH_CLIENT_ROOT_CSR = COCKROACH_CERTS_DIR + "/client.root.csr";
-    private static final String COCKROACH_CLIENT_ROOT_CERT = COCKROACH_CERTS_DIR + "/client.root.crt";
+    private static final String COCKROACH_CLIENT_ROOT_CSR = COCKROACH_INTERNAL_DIR + "/client.root.csr";
+    private static final String COCKROACH_CLIENT_ROOT_KEY = COCKROACH_EXTERNAL_DIR + "/client.root.key";
+    private static final String COCKROACH_CLIENT_ROOT_CERT = COCKROACH_EXTERNAL_DIR + "/client.root.crt";
 
     public static final String CONFIG_CA = "/config/ca.cnf";
     public static final String CONFIG_CLIENT_ROOT = "/config/client.root.cnf";
@@ -109,7 +110,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         handleProcess(new ProcessBuilder("rm", "-f", "/config/index.txt", "/config/serial"));
         handleProcess(new ProcessBuilder("touch", "./config/index.txt"));
         handleProcess(new ProcessBuilder("touch", "./config/serial"));
-        handleProcess(new ProcessBuilder("echo", "01", ">", "/config/serial"));
+        handleProcess(new ProcessBuilder("bash", "-c", "echo '01' > /config/serial"));
 
         // generate node certs...
 
@@ -147,7 +148,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         commands.add("-out");
         commands.add(out);
         commands.add("-outdir");
-        commands.add(COCKROACH_CERTS_DIR);
+        commands.add(COCKROACH_EXTERNAL_DIR);
         commands.add("-in");
         commands.add(in);
         commands.add("-batch");
@@ -191,7 +192,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         createCACommands.add("cert");
         createCACommands.add("create-ca");
         createCACommands.add("--certs-dir");
-        createCACommands.add(COCKROACH_CERTS_DIR);
+        createCACommands.add(COCKROACH_EXTERNAL_DIR);
         createCACommands.add("--ca-key");
         createCACommands.add(COCKROACH_CA_KEY);
 
@@ -204,7 +205,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
             createClientCommands.add("create-client");
             createClientCommands.add(username);
             createClientCommands.add("--certs-dir");
-            createClientCommands.add(COCKROACH_CERTS_DIR);
+            createClientCommands.add(COCKROACH_EXTERNAL_DIR);
             createClientCommands.add("--ca-key");
             createClientCommands.add(COCKROACH_CA_KEY);
             createClientCommands.add("--also-generate-pkcs8-key");
@@ -219,7 +220,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         createNodeCommands.add("create-node");
         createNodeCommands.addAll(nodeAlternativeNames);
         createNodeCommands.add("--certs-dir");
-        createNodeCommands.add(COCKROACH_CERTS_DIR);
+        createNodeCommands.add(COCKROACH_EXTERNAL_DIR);
         createNodeCommands.add("--ca-key");
         createNodeCommands.add(COCKROACH_CA_KEY);
 

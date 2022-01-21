@@ -20,8 +20,8 @@ RUN touch ./config/index.txt
 RUN touch ./config/serial
 RUN echo '01' > /config/serial
 
+RUN mkdir -pv ./.cockroach-internal
 RUN mkdir -pv ./.cockroach-certs
-RUN mkdir -pv ./.cockroach-key
 
 EXPOSE 9999
 
