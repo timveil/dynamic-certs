@@ -7,6 +7,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.core.env.Environment;
+import org.springframework.util.StringUtils;
 
 import java.io.IOException;
 import java.util.*;
@@ -35,6 +36,10 @@ public class DynamicCertsApplication implements ApplicationRunner {
     private static final String COCKROACH_CLIENT_ROOT_CSR = COCKROACH_CERTS_DIR + "/client.root.csr";
     private static final String COCKROACH_CLIENT_ROOT_CERT = COCKROACH_CERTS_DIR + "/client.root.crt";
 
+    public static final String CONFIG_CA = "/config/ca.cnf";
+    public static final String CONFIG_CLIENT_ROOT = "/config/client.root.cnf";
+    public static final String CONFIG_NODE = "/config/node.cnf";
+
 
     public static void main(String[] args) {
         SpringApplication.run(DynamicCertsApplication.class, args);
@@ -49,9 +54,15 @@ public class DynamicCertsApplication implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) throws Exception {
 
-        final List<String> nodeAlternativeNames = Arrays.asList(env.getRequiredProperty(NODE_ALTERNATIVE_NAMES).trim().split("\\s+"));
+        final String nodeNamesString = env.getProperty(NODE_ALTERNATIVE_NAMES);
         final String clientUsername = env.getProperty(CLIENT_USERNAME, DEFAULT_USERNAME);
         final boolean useOpenSSL = env.getProperty(USE_OPENSSL, Boolean.class, false);
+
+        List<String> nodeAlternativeNames = new ArrayList<>();
+
+        if (StringUtils.hasText(nodeNamesString)) {
+            nodeAlternativeNames = Arrays.asList(nodeNamesString.trim().split("\\s+"));
+        }
 
         log.info("{} is [{}]", USE_OPENSSL, useOpenSSL);
         log.info("{} is [{}]", NODE_ALTERNATIVE_NAMES, nodeAlternativeNames);
@@ -64,17 +75,19 @@ public class DynamicCertsApplication implements ApplicationRunner {
             usernames.add(DEFAULT_USERNAME);
         }
 
-        if (useOpenSSL) {
-            createWithOpenSSL(nodeAlternativeNames, usernames);
-        } else {
-            createWithCockroach(nodeAlternativeNames, usernames);
+        try {
+            if (useOpenSSL) {
+                createWithOpenSSL(nodeAlternativeNames, usernames);
+            } else {
+                createWithCockroach(nodeAlternativeNames, usernames);
+            }
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
         }
     }
 
     private void createWithOpenSSL(List<String> nodeAlternativeNames, Set<String> usernames) throws IOException, InterruptedException {
         generateKey(COCKROACH_CA_KEY);
-
-        handleProcess(new ProcessBuilder("chmod", "400", COCKROACH_CA_KEY));
 
         List<String> createCACertCommands = new ArrayList<>();
         createCACertCommands.add("openssl");
@@ -82,7 +95,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         createCACertCommands.add("-new");
         createCACertCommands.add("-x509");
         createCACertCommands.add("-config");
-        createCACertCommands.add("ca.cnf");
+        createCACertCommands.add(CONFIG_CA);
         createCACertCommands.add("-key");
         createCACertCommands.add(COCKROACH_CA_KEY);
         createCACertCommands.add("-out");
@@ -93,15 +106,16 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
         handleProcess(new ProcessBuilder(createCACertCommands));
 
-        handleProcess(new ProcessBuilder("rm", "-f", "index.txt", "serial.txt"));
-        handleProcess(new ProcessBuilder("touch", "index.txt"));
-        handleProcess(new ProcessBuilder("echo", "'01'", ">", "serial.txt"));
+        handleProcess(new ProcessBuilder("rm", "-f", "/config/index.txt", "/config/serial"));
+        handleProcess(new ProcessBuilder("touch", "./config/index.txt"));
+        handleProcess(new ProcessBuilder("touch", "./config/serial"));
+        handleProcess(new ProcessBuilder("echo", "01", ">", "/config/serial"));
 
         // generate node certs...
 
         generateKey(COCKROACH_NODE_KEY);
 
-        generateCSR("node.cnf", COCKROACH_NODE_KEY, COCKROACH_NODE_CSR);
+        generateCSR(CONFIG_NODE, COCKROACH_NODE_KEY, COCKROACH_NODE_CSR);
 
         generateCertificate(COCKROACH_NODE_CERT, COCKROACH_NODE_CSR);
 
@@ -110,7 +124,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
         generateKey(COCKROACH_CLIENT_ROOT_KEY);
 
-        generateCSR("client.root.cnf", COCKROACH_CLIENT_ROOT_KEY, COCKROACH_CLIENT_ROOT_CSR);
+        generateCSR(CONFIG_CLIENT_ROOT, COCKROACH_CLIENT_ROOT_KEY, COCKROACH_CLIENT_ROOT_CSR);
 
         generateCertificate(COCKROACH_CLIENT_ROOT_CERT, COCKROACH_CLIENT_ROOT_CSR);
 
@@ -121,7 +135,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         commands.add("openssl");
         commands.add("ca");
         commands.add("-config");
-        commands.add("ca.cnf");
+        commands.add(CONFIG_CA);
         commands.add("-keyfile");
         commands.add(COCKROACH_CA_KEY);
         commands.add("-cert");

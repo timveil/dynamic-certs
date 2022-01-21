@@ -14,6 +14,11 @@ COPY --from=builder /app/snapshot-dependencies/ ./
 COPY --from=builder /app/spring-boot-loader/ ./
 COPY --from=builder /app/application/ ./
 COPY --from=cockroach /cockroach/ ./
+COPY ./config ./config
+
+RUN touch ./config/index.txt
+RUN touch ./config/serial
+RUN echo '01' > /config/serial
 
 RUN mkdir -pv ./.cockroach-certs
 RUN mkdir -pv ./.cockroach-key
