@@ -27,21 +27,21 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
     private static final String DEFAULT_USERNAME = "root";
 
-    private static final String COCKROACH_INTERNAL_DIR = "/.cockroach-internal";
-    private static final String COCKROACH_EXTERNAL_DIR = "/.cockroach-certs";
+    private static final String INTERNAL_DIR = "/.cockroach-internal";
+    private static final String EXTERNAL_DIR = "/.cockroach-certs";
 
-    private static final String COCKROACH_CA_KEY = COCKROACH_INTERNAL_DIR + "/ca.key";
-    private static final String COCKROACH_CA_CERT = COCKROACH_EXTERNAL_DIR + "/ca.crt";
+    private static final String CA_KEY = INTERNAL_DIR + "/ca.key";
+    private static final String CA_CERT = EXTERNAL_DIR + "/ca.crt";
 
-    private static final String COCKROACH_NODE_CSR = COCKROACH_INTERNAL_DIR + "/node.csr";
-    private static final String COCKROACH_NODE_KEY = COCKROACH_EXTERNAL_DIR + "/node.key";
-    private static final String COCKROACH_NODE_CERT = COCKROACH_EXTERNAL_DIR + "/node.crt";
+    private static final String NODE_CSR = INTERNAL_DIR + "/node.csr";
+    private static final String NODE_KEY = EXTERNAL_DIR + "/node.key";
+    private static final String NODE_CERT = EXTERNAL_DIR + "/node.crt";
 
-    private static final String COCKROACH_CLIENT_ROOT_CSR = COCKROACH_INTERNAL_DIR + "/client.root.csr";
-    private static final String COCKROACH_CLIENT_ROOT_KEY_PEM = COCKROACH_EXTERNAL_DIR + "/client.root.key";
-    private static final String COCKROACH_CLIENT_ROOT_KEY_DER = COCKROACH_EXTERNAL_DIR + "/client.root.der";
-    private static final String COCKROACH_CLIENT_ROOT_CERT = COCKROACH_EXTERNAL_DIR + "/client.root.crt";
-    private static final String COCKROACH_CLIENT_ROOT_P12 = COCKROACH_EXTERNAL_DIR + "/client.p12";
+    private static final String CLIENT_ROOT_CSR = INTERNAL_DIR + "/client.root.csr";
+    private static final String CLIENT_ROOT_KEY_PEM = EXTERNAL_DIR + "/client.root.key";
+    private static final String CLIENT_ROOT_KEY_DER = EXTERNAL_DIR + "/client.root.der";
+    private static final String CLIENT_ROOT_CERT = EXTERNAL_DIR + "/client.root.crt";
+    private static final String CLIENT_ROOT_P12 = EXTERNAL_DIR + "/client.root.p12";
 
     public static final String CONFIG_CA = "/config/ca.cnf";
     public static final String CONFIG_CLIENT_ROOT = "/config/client.root.cnf";
@@ -94,25 +94,9 @@ public class DynamicCertsApplication implements ApplicationRunner {
     }
 
     private void createWithOpenSSL(List<String> nodeAlternativeNames, Set<String> usernames) throws IOException, InterruptedException {
-        generateKey(COCKROACH_CA_KEY, Outform.PEM);
+        generateKey(CA_KEY, Outform.PEM);
 
-        List<String> createCACertCommands = new ArrayList<>();
-        createCACertCommands.add("openssl");
-        createCACertCommands.add("req");
-        createCACertCommands.add("-verbose");
-        createCACertCommands.add("-new");
-        createCACertCommands.add("-x509");
-        createCACertCommands.add("-config");
-        createCACertCommands.add(CONFIG_CA);
-        createCACertCommands.add("-key");
-        createCACertCommands.add(COCKROACH_CA_KEY);
-        createCACertCommands.add("-out");
-        createCACertCommands.add(COCKROACH_CA_CERT);
-        createCACertCommands.add("-days");
-        createCACertCommands.add("365");
-        createCACertCommands.add("-batch");
-
-        handleProcess(new ProcessBuilder(createCACertCommands));
+        generateCA();
 
         handleProcess(new ProcessBuilder("rm", "-f", "/config/index.txt", "/config/serial"));
         handleProcess(new ProcessBuilder("touch", "./config/index.txt"));
@@ -121,25 +105,45 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
         // generate node certs...
 
-        generateKey(COCKROACH_NODE_KEY, Outform.PEM);
+        generateKey(NODE_KEY, Outform.PEM);
 
-        generateCSR(CONFIG_NODE, COCKROACH_NODE_KEY, COCKROACH_NODE_CSR);
+        generateCSR(CONFIG_NODE, NODE_KEY, NODE_CSR);
 
-        generateCertificate(COCKROACH_NODE_CERT, COCKROACH_NODE_CSR);
+        generateCertificate(NODE_CERT, NODE_CSR);
 
 
         // generate client certs...
 
-        generateKey(COCKROACH_CLIENT_ROOT_KEY_PEM, Outform.PEM);
+        generateKey(CLIENT_ROOT_KEY_PEM, Outform.PEM);
 
-        generateKey(COCKROACH_CLIENT_ROOT_KEY_DER, Outform.DER);
+        generateKey(CLIENT_ROOT_KEY_DER, Outform.DER);
 
-        generateCSR(CONFIG_CLIENT_ROOT, COCKROACH_CLIENT_ROOT_KEY_PEM, COCKROACH_CLIENT_ROOT_CSR);
+        generateCSR(CONFIG_CLIENT_ROOT, CLIENT_ROOT_KEY_PEM, CLIENT_ROOT_CSR);
 
-        generateCertificate(COCKROACH_CLIENT_ROOT_CERT, COCKROACH_CLIENT_ROOT_CSR);
+        generateCertificate(CLIENT_ROOT_CERT, CLIENT_ROOT_CSR);
 
-        generateP12(COCKROACH_CLIENT_ROOT_P12, COCKROACH_CLIENT_ROOT_CERT, COCKROACH_CLIENT_ROOT_KEY_PEM);
+        generateP12(CLIENT_ROOT_P12, CLIENT_ROOT_CERT, CLIENT_ROOT_KEY_PEM);
 
+    }
+
+    private void generateCA() throws IOException, InterruptedException {
+        List<String> commands = new ArrayList<>();
+        commands.add("openssl");
+        commands.add("req");
+        commands.add("-verbose");
+        commands.add("-new");
+        commands.add("-x509");
+        commands.add("-config");
+        commands.add(CONFIG_CA);
+        commands.add("-key");
+        commands.add(CA_KEY);
+        commands.add("-out");
+        commands.add(CA_CERT);
+        commands.add("-days");
+        commands.add("365");
+        commands.add("-batch");
+
+        handleProcess(new ProcessBuilder(commands));
     }
 
     private void generateCertificate(String out, String in) throws IOException, InterruptedException {
@@ -150,9 +154,9 @@ public class DynamicCertsApplication implements ApplicationRunner {
         commands.add("-config");
         commands.add(CONFIG_CA);
         commands.add("-keyfile");
-        commands.add(COCKROACH_CA_KEY);
+        commands.add(CA_KEY);
         commands.add("-cert");
-        commands.add(COCKROACH_CA_CERT);
+        commands.add(CA_CERT);
         commands.add("-policy");
         commands.add("signing_policy");
         commands.add("-extensions");
@@ -160,7 +164,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         commands.add("-out");
         commands.add(out);
         commands.add("-outdir");
-        commands.add(COCKROACH_EXTERNAL_DIR);
+        commands.add(EXTERNAL_DIR);
         commands.add("-in");
         commands.add(in);
         commands.add("-batch");
@@ -228,9 +232,9 @@ public class DynamicCertsApplication implements ApplicationRunner {
         createCACommands.add("cert");
         createCACommands.add("create-ca");
         createCACommands.add("--certs-dir");
-        createCACommands.add(COCKROACH_EXTERNAL_DIR);
+        createCACommands.add(EXTERNAL_DIR);
         createCACommands.add("--ca-key");
-        createCACommands.add(COCKROACH_CA_KEY);
+        createCACommands.add(CA_KEY);
 
         handleProcess(new ProcessBuilder(createCACommands));
 
@@ -241,9 +245,9 @@ public class DynamicCertsApplication implements ApplicationRunner {
             createClientCommands.add("create-client");
             createClientCommands.add(username);
             createClientCommands.add("--certs-dir");
-            createClientCommands.add(COCKROACH_EXTERNAL_DIR);
+            createClientCommands.add(EXTERNAL_DIR);
             createClientCommands.add("--ca-key");
-            createClientCommands.add(COCKROACH_CA_KEY);
+            createClientCommands.add(CA_KEY);
             createClientCommands.add("--also-generate-pkcs8-key");
 
             handleProcess(new ProcessBuilder(createClientCommands));
@@ -256,9 +260,9 @@ public class DynamicCertsApplication implements ApplicationRunner {
         createNodeCommands.add("create-node");
         createNodeCommands.addAll(nodeAlternativeNames);
         createNodeCommands.add("--certs-dir");
-        createNodeCommands.add(COCKROACH_EXTERNAL_DIR);
+        createNodeCommands.add(EXTERNAL_DIR);
         createNodeCommands.add("--ca-key");
-        createNodeCommands.add(COCKROACH_CA_KEY);
+        createNodeCommands.add(CA_KEY);
 
         handleProcess(new ProcessBuilder(createNodeCommands));
     }
