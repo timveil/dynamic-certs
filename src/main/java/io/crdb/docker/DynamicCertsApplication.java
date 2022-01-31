@@ -1,5 +1,7 @@
 package io.crdb.docker;
 
+import com.google.common.base.Joiner;
+import com.google.common.net.InetAddresses;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -16,9 +18,10 @@ import java.util.*;
 public class DynamicCertsApplication implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DynamicCertsApplication.class);
+    private static final String ORGANIZATION_NAME = "Cockroach";
 
     private enum Outform {
-        PEM,DER
+        PEM, DER
     }
 
     private static final String USE_OPENSSL = "USE_OPENSSL";
@@ -37,15 +40,9 @@ public class DynamicCertsApplication implements ApplicationRunner {
     private static final String NODE_KEY = EXTERNAL_DIR + "/node.key";
     private static final String NODE_CERT = EXTERNAL_DIR + "/node.crt";
 
-    private static final String CLIENT_ROOT_CSR = INTERNAL_DIR + "/client.root.csr";
-    private static final String CLIENT_ROOT_KEY_PEM = EXTERNAL_DIR + "/client.root.key";
-    private static final String CLIENT_ROOT_KEY_DER = EXTERNAL_DIR + "/client.root.der";
-    private static final String CLIENT_ROOT_CERT = EXTERNAL_DIR + "/client.root.crt";
-    private static final String CLIENT_ROOT_P12 = EXTERNAL_DIR + "/client.root.p12";
 
     public static final String CONFIG_CA = "/config/ca.cnf";
-    public static final String CONFIG_CLIENT_ROOT = "/config/client.root.cnf";
-    public static final String CONFIG_NODE = "/config/node.cnf";
+    public static final String CONFIG_CSR = "/config/csr.cnf";
 
 
     public static void main(String[] args) {
@@ -78,7 +75,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         Set<String> usernames = new HashSet<>();
         usernames.add(clientUsername);
 
-        if (!clientUsername.equals(DEFAULT_USERNAME)){
+        if (!clientUsername.equals(DEFAULT_USERNAME)) {
             usernames.add(DEFAULT_USERNAME);
         }
 
@@ -93,7 +90,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         }
     }
 
-    private void createWithOpenSSL(List<String> nodeAlternativeNames, Set<String> usernames) throws IOException, InterruptedException {
+    private void createWithOpenSSL(List<String> nodeAlternativeNames, Set<String> usernames) {
         generateKey(CA_KEY, Outform.PEM);
 
         generateCA();
@@ -104,29 +101,56 @@ public class DynamicCertsApplication implements ApplicationRunner {
         handleProcess(new ProcessBuilder("bash", "-c", "echo '01' > /config/serial"));
 
         // generate node certs...
-
         generateKey(NODE_KEY, Outform.PEM);
 
-        generateCSR(CONFIG_NODE, NODE_KEY, NODE_CSR);
+        String subjectAltName = getSubjectAltName(nodeAlternativeNames);
+
+        log.debug("Subject Alt Name = [{}]", subjectAltName);
+
+        generateCSR(NODE_CSR, NODE_KEY, null, subjectAltName);
 
         generateCertificate(NODE_CERT, NODE_CSR);
 
 
         // generate client certs...
+        for (String username : usernames) {
+            String clientKeyPEM = EXTERNAL_DIR + String.format("/client.%s.key", username.toLowerCase());
+            String clientKeyDER = EXTERNAL_DIR + String.format("/client.%s.der", username.toLowerCase());
+            String clientCsr = INTERNAL_DIR + String.format("/client.%s.csr", username.toLowerCase());
+            String clientCrt = EXTERNAL_DIR + String.format("/client.%s.crt", username.toLowerCase());
+            String clientP12 = EXTERNAL_DIR + String.format("/client.%s.p12", username.toLowerCase());
 
-        generateKey(CLIENT_ROOT_KEY_PEM, Outform.PEM);
-
-        generateKey(CLIENT_ROOT_KEY_DER, Outform.DER);
-
-        generateCSR(CONFIG_CLIENT_ROOT, CLIENT_ROOT_KEY_PEM, CLIENT_ROOT_CSR);
-
-        generateCertificate(CLIENT_ROOT_CERT, CLIENT_ROOT_CSR);
-
-        generateP12(CLIENT_ROOT_P12, CLIENT_ROOT_CERT, CLIENT_ROOT_KEY_PEM);
+            generateKey(clientKeyPEM, Outform.PEM);
+            generateKey(clientKeyDER, Outform.DER);
+            generateCSR(clientCsr, clientKeyPEM, username, String.format("DNS:%s", username));
+            generateCertificate(clientCrt, clientCsr);
+            generateP12(clientP12, clientCrt, clientKeyPEM);
+        }
 
     }
 
-    private void generateCA() throws IOException, InterruptedException {
+    private String getSubjectAltName(List<String> nodeAlternativeNames) {
+        Set<String> names = new HashSet<>();
+        names.add("DNS:node");
+
+        for (String altName : nodeAlternativeNames) {
+
+            altName = StringUtils.trimWhitespace(altName);
+
+            if (StringUtils.hasText(altName)) {
+                if (InetAddresses.isInetAddress(altName)) {
+                    altName = "IP:" + altName;
+                } else {
+                    altName = "DNS:" + altName;
+                }
+                names.add(altName);
+            }
+        }
+
+        return Joiner.on(",").skipNulls().join(names);
+    }
+
+    private void generateCA() {
         List<String> commands = new ArrayList<>();
         commands.add("openssl");
         commands.add("req");
@@ -146,7 +170,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         handleProcess(new ProcessBuilder(commands));
     }
 
-    private void generateCertificate(String out, String in) throws IOException, InterruptedException {
+    private void generateCertificate(String out, String in) {
         List<String> commands = new ArrayList<>();
         commands.add("openssl");
         commands.add("ca");
@@ -172,14 +196,27 @@ public class DynamicCertsApplication implements ApplicationRunner {
         handleProcess(new ProcessBuilder(commands));
     }
 
-    private void generateCSR(String config, String key, String out) throws IOException, InterruptedException {
+    private void generateCSR(String out, String key, String commonName, String subjectAltName) {
+        StringBuilder distinguishedName = new StringBuilder();
+        distinguishedName.append("/O=");
+        distinguishedName.append(ORGANIZATION_NAME);
+
+        if (StringUtils.hasText(commonName)) {
+            distinguishedName.append("/CN=");
+            distinguishedName.append(commonName);
+        }
+
         List<String> commands = new ArrayList<>();
         commands.add("openssl");
         commands.add("req");
         commands.add("-verbose");
         commands.add("-new");
         commands.add("-config");
-        commands.add(config);
+        commands.add(CONFIG_CSR);
+        commands.add("-subj");
+        commands.add(String.format("%s", distinguishedName));
+        commands.add("-addext");
+        commands.add(String.format("subjectAltName=%s", subjectAltName));
         commands.add("-key");
         commands.add(key);
         commands.add("-out");
@@ -189,7 +226,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         handleProcess(new ProcessBuilder(commands));
     }
 
-    private void generateKey(String out, Outform outform) throws IOException, InterruptedException {
+    private void generateKey(String out, Outform outform) {
         List<String> commands = new ArrayList<>();
         commands.add("openssl");
         commands.add("genpkey");
@@ -206,7 +243,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
     }
 
-    private void generateP12(String out, String inCert, String inKey) throws IOException, InterruptedException {
+    private void generateP12(String out, String inCert, String inKey) {
         List<String> commands = new ArrayList<>();
         commands.add("openssl");
         commands.add("pkcs12");
@@ -226,7 +263,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         handleProcess(new ProcessBuilder("chmod", "600", out));
     }
 
-    private void createWithCockroach(List<String> nodeAlternativeNames, Set<String> usernames) throws IOException, InterruptedException {
+    private void createWithCockroach(List<String> nodeAlternativeNames, Set<String> usernames) {
         List<String> createCACommands = new ArrayList<>();
         createCACommands.add("/cockroach");
         createCACommands.add("cert");
@@ -267,7 +304,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         handleProcess(new ProcessBuilder(createNodeCommands));
     }
 
-    private void handleProcess(ProcessBuilder builder) throws IOException, InterruptedException {
+    private void handleProcess(ProcessBuilder builder) {
 
         builder.inheritIO();
 
@@ -275,14 +312,35 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
         log.debug("starting command... {}", command);
 
-        Process process = builder.start();
-        int exitCode = process.waitFor();
+        Process process = null;
 
-        if (exitCode != 0) {
-            throw new RuntimeException(String.format("the following command exited ABNORMALLY with code [%d]: %s", exitCode, command));
-        } else {
-            log.debug("command exited SUCCESSFULLY with code [{}]", exitCode);
+        try {
+            process = builder.start();
+
+            int exitCode = process.waitFor();
+
+            String is = new String(process.getInputStream().readAllBytes());
+
+            log.debug("input stream:\n\n{}", is);
+
+            String es = new String(process.getErrorStream().readAllBytes());
+
+            log.debug("error stream:\n\n{}", es);
+
+            if (exitCode != 0) {
+                throw new RuntimeException(String.format("the following command exited ABNORMALLY with code [%d]: %s", exitCode, command));
+            } else {
+                log.debug("command exited SUCCESSFULLY with code [{}]", exitCode);
+            }
+
+        } catch (IOException | InterruptedException e) {
+            log.error(e.getMessage(), e);
+        } finally {
+            if (process != null) {
+                process.destroy();
+            }
         }
+
 
     }
 }
