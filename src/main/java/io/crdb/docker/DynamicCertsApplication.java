@@ -41,10 +41,8 @@ public class DynamicCertsApplication implements ApplicationRunner {
     private static final String NODE_KEY = EXTERNAL_DIR + "/node.key";
     private static final String NODE_CERT = EXTERNAL_DIR + "/node.crt";
 
-
     public static final String CONFIG_CA = "/config/ca.cnf";
     public static final String CONFIG_CSR = "/config/csr.cnf";
-
 
     public static void main(String[] args) {
         SpringApplication.run(DynamicCertsApplication.class, args);
@@ -121,7 +119,6 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
         generateCertificate(NODE_CERT, NODE_CSR);
 
-
         // generate client certs...
         for (String username : usernames) {
             String clientKeyPEM = EXTERNAL_DIR + String.format("/client.%s.key", username.toLowerCase());
@@ -136,7 +133,6 @@ public class DynamicCertsApplication implements ApplicationRunner {
             generateCertificate(clientCrt, clientCsr);
             generateP12(clientP12, clientCrt, clientKeyPEM);
         }
-
     }
 
     private String getSubjectAltName(List<String> nodeAlternativeNames) {
@@ -171,10 +167,10 @@ public class DynamicCertsApplication implements ApplicationRunner {
         commands.add(CONFIG_CA);
         commands.add("-key");
         commands.add(CA_KEY);
-        commands.add("-out");
-        commands.add(CA_CERT);
         commands.add("-days");
         commands.add("365");
+        commands.add("-out");
+        commands.add(CA_CERT);
         commands.add("-batch");
 
         handleProcess(new ProcessBuilder(commands));
@@ -195,12 +191,12 @@ public class DynamicCertsApplication implements ApplicationRunner {
         commands.add("signing_policy");
         commands.add("-extensions");
         commands.add("signing_node_req");
+        commands.add("-in");
+        commands.add(in);
         commands.add("-out");
         commands.add(out);
         commands.add("-outdir");
         commands.add(EXTERNAL_DIR);
-        commands.add("-in");
-        commands.add(in);
         commands.add("-batch");
 
         handleProcess(new ProcessBuilder(commands));
@@ -251,7 +247,6 @@ public class DynamicCertsApplication implements ApplicationRunner {
         handleProcess(new ProcessBuilder(commands));
 
         handleProcess(new ProcessBuilder("chmod", "400", out));
-
     }
 
     private void generateP12(String out, String inCert, String inKey) {
@@ -259,15 +254,14 @@ public class DynamicCertsApplication implements ApplicationRunner {
         commands.add("openssl");
         commands.add("pkcs12");
         commands.add("-export");
-        commands.add("-out");
-        commands.add(out);
         commands.add("-inkey");
         commands.add(inKey);
         commands.add("-in");
         commands.add(inCert);
+        commands.add("-out");
+        commands.add(out);
         commands.add("-passout");
         commands.add("pass:password"); //todo: make dynamic
-
 
         handleProcess(new ProcessBuilder(commands));
 
@@ -300,7 +294,6 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
             handleProcess(new ProcessBuilder(createClientCommands));
         }
-
 
         List<String> createNodeCommands = new ArrayList<>();
         createNodeCommands.add("/cockroach");
