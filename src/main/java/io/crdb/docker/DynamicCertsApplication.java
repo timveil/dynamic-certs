@@ -85,7 +85,6 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
         try {
 
-
             if (useOpenSSL) {
                 createWithOpenSSL(nodeAlternativeNames, usernames);
             } else {
@@ -98,7 +97,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
         sw.stop();
 
-        log.info("Certificate Generation Complete! {}", sw.shortSummary());
+        log.info("Certificate Generation Complete in {} milliseconds!", sw.getTotalTimeMillis());
     }
 
     private void createWithOpenSSL(List<String> nodeAlternativeNames, Set<String> usernames) {
@@ -354,7 +353,5 @@ public class DynamicCertsApplication implements ApplicationRunner {
                 process.destroy();
             }
         }
-
-
     }
 }
