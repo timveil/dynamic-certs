@@ -69,7 +69,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         }
 
         log.info("{} is [{}]", USE_OPENSSL, useOpenSSL);
-        log.info("{} is [{}]", NODE_ALTERNATIVE_NAMES, nodeAlternativeNames);
+        log.info("{} is {}", NODE_ALTERNATIVE_NAMES, nodeAlternativeNames);
         log.info("{} is [{}]", CLIENT_USERNAME, clientUsername);
 
         Set<String> usernames = new HashSet<>();
@@ -306,8 +306,6 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
     private void handleProcess(ProcessBuilder builder) {
 
-        builder.inheritIO();
-
         String command = builder.command().toString();
 
         log.debug("starting command... {}", command);
@@ -321,11 +319,15 @@ public class DynamicCertsApplication implements ApplicationRunner {
 
             String is = new String(process.getInputStream().readAllBytes());
 
-            log.debug("input stream:\n\n{}", is);
+            if (StringUtils.hasText(is)) {
+                log.info("input stream:\n\n{}", is);
+            }
 
             String es = new String(process.getErrorStream().readAllBytes());
 
-            log.debug("error stream:\n\n{}", es);
+            if (StringUtils.hasText(es)) {
+                log.error("error stream:\n\n{}", es);
+            }
 
             if (exitCode != 0) {
                 throw new RuntimeException(String.format("the following command exited ABNORMALLY with code [%d]: %s", exitCode, command));
