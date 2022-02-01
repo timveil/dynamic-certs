@@ -9,6 +9,7 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.core.env.Environment;
+import org.springframework.util.StopWatch;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
@@ -79,15 +80,25 @@ public class DynamicCertsApplication implements ApplicationRunner {
             usernames.add(DEFAULT_USERNAME);
         }
 
+        StopWatch sw = new StopWatch();
+        sw.start();
+
         try {
+
+
             if (useOpenSSL) {
                 createWithOpenSSL(nodeAlternativeNames, usernames);
             } else {
                 createWithCockroach(nodeAlternativeNames, usernames);
             }
+
         } catch (Exception e) {
             log.error(e.getMessage(), e);
         }
+
+        sw.stop();
+
+        log.info("Certificate Generation Complete! {}", sw.shortSummary());
     }
 
     private void createWithOpenSSL(List<String> nodeAlternativeNames, Set<String> usernames) {
@@ -230,6 +241,7 @@ public class DynamicCertsApplication implements ApplicationRunner {
         List<String> commands = new ArrayList<>();
         commands.add("openssl");
         commands.add("genpkey");
+        commands.add("-quiet");
         commands.add("-outform");
         commands.add(outform.name());
         commands.add("-algorithm");
