@@ -1,4 +1,4 @@
-FROM maven:3.8-eclipse-temurin-19 as builder
+FROM maven:3.9-eclipse-temurin-21 as builder
 WORKDIR /app
 COPY ./pom.xml ./pom.xml
 RUN mvn dependency:go-offline -B
@@ -8,7 +8,7 @@ RUN java -Djarmode=layertools -jar application.jar extract
 
 FROM cockroachdb/cockroach:latest as cockroach
 
-FROM eclipse-temurin:19-jdk
+FROM eclipse-temurin:21-jdk
 COPY --from=builder /app/dependencies/ ./
 COPY --from=builder /app/snapshot-dependencies/ ./
 COPY --from=builder /app/spring-boot-loader/ ./

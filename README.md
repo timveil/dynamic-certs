@@ -3,7 +3,7 @@
 
 ## Building the Image
 ```bash
-docker build --no-cache -t timveil/cockroachdb-dynamic-certs:latest .
+docker build --no-cache --platform linux/arm64 -t timveil/cockroachdb-dynamic-certs:latest .
 ```
 
 ## Publishing the Image
